@@ -16,6 +16,8 @@ import pylab as pl
 import math
 import random
 
+# ----> ADJUST TARGET DISTRIBUTION HERE	<----
+
 # Define the target distribution ("toy posterior")
 # Needs to integrate to 1
 peakOneBounds = (0,0.4)
@@ -24,8 +26,10 @@ valleyHeight = 0.000001
 peakTwoBounds = (0.9,1.0)
 peakTwoHeight = (8.0-(valleyHeight*(peakTwoBounds[0]-peakOneBounds[1])))
 
+
+# ----> FUNCTION AND CLASS DEFINITIONS <----
 			
-# Define prior on parameters of interest
+# Define probability distribution on parameters of interest
 def posterior(theta):
 	"""
 	A function to return the 'posterior' density for a given value of theta.
@@ -40,10 +44,11 @@ def posterior(theta):
 		return 0.0
 
 	
-# Define proposal distribution
 def drawTheta(thetaCurr):
 	"""
-	This function provides proposed values for p, given a current value.
+	This function provides proposed values for theta, given a current value. It currently
+	uses only a uniform distribution centered on the current value. The size of the window
+	is specified below (propWindowSize).
 	"""
 	propWindowSize = 0.1
 	newTheta = uniform.rvs(loc=thetaCurr-(propWindowSize/2.0),scale=propWindowSize) # min = loc, max = loc+scale
@@ -52,30 +57,37 @@ def drawTheta(thetaCurr):
 def chainSwap(chains):
 	"""
 	This function attempts a Metropolis-Hastings swap between the positions of two chains.
+	As an argument, it takes a list of chain objects. Swaps are attempted as outlined by
+	Yang in "Molecular Evolution: A Statistical Approach" pgs. XX-XX
 	"""
-	swapChainOne = random.choice(chains)
-	swapChainTwo = random.choice(chains)
+	swapChainOne = random.choice(chains)	# Pick first chain to use in swap
+	swapChainTwo = random.choice(chains)	# Pick second chain to use in swap
 	while (swapChainOne == swapChainTwo):	# Making sure same chain not selected twice
 		swapChainTwo = random.choice(chains)
+	
+	# Proposal ratio - see equation X.X in Yang
 	chainR = math.pow( (swapChainTwo.thetaPost/swapChainOne.thetaPost) , ((1/swapChainOne.temp)-(1/swapChainTwo.temp)) )
 	chainRanUnifDraw = uniform.rvs()
 	if (chainRanUnifDraw <= chainR):
-		thetaOne = swapChainOne.theta
+		thetaOne = swapChainOne.theta	# Record current values for theta for each chain
 		thetaTwo = swapChainTwo.theta
-		swapChainOne.theta = thetaTwo
+		swapChainOne.theta = thetaTwo	# Swap the values of theta
 		swapChainTwo.theta = thetaOne
-		swapChainOne.thetaProp = drawTheta(swapChainOne.theta)
+		swapChainOne.thetaProp = drawTheta(swapChainOne.theta)	# Reset proposed theta values based on new theta values
 		swapChainTwo.thetaProp = drawTheta(swapChainTwo.theta)
-		swapChainOne.swapCount = swapChainOne.swapCount + 1
+		swapChainOne.swapCount = swapChainOne.swapCount + 1		# Record the swap in each chain's counts
 		swapChainTwo.swapCount = swapChainTwo.swapCount + 1
 
-	
 class chain(object):
 	"""
 	A class to define instances of Metropolis-coupled Markov chains.
 	"""	
 	
 	def __init__(self,lam,num,name,theta):
+		"""
+		Initializes variables associated with a chain. The parameter value of interest is
+		"theta". The strength of heating is adjusted with "lam". 
+		"""
 		self.name = name
 		self.theta = theta
 		self.thetaPost = posterior(self.theta)
@@ -88,6 +100,9 @@ class chain(object):
 		self.reportState(debug=False)
 	
 	def reportState(self,debug=False):
+		"""
+		A function to report a chain's current status.
+		"""
 		print ""
 		print "Chain Name: %s" % self.name
 	 	print "Chain Number: %s" % self.num
@@ -96,11 +111,14 @@ class chain(object):
 		print "Chain Theta: %f" % self.theta
 		print "Chain Probability Density: %f" % self.thetaPost
 		print "Chain Swap Count: %d" % self.swapCount
-		if (debug):
+		if (debug):		# Turn on debugging statements, if needed
 			print "Chain %s Temp Test: %f" % (self.name,math.pow(0.9,(1.0/self.temp)))
 		print ""
 	
 	def update(self):
+		"""
+		Updates a chain according to the usual Metropolis-Hastings rules. 
+		"""
 		self.thetaPropPost = posterior(self.thetaProp)
 		self.thetaPost = posterior(self.theta)
 		if (self.thetaPropPost >= self.thetaPost): # If proposed value has posterior density > curr value
@@ -116,12 +134,14 @@ class chain(object):
 			print (self.theta,self.thetaPost)
 			print ""
 		self.thetaProp = drawTheta(self.theta) # Finish by drawing new proposed value of theta
-		self.thetaPropPost = posterior(self.thetaProp)
+		self.thetaPropPost = posterior(self.thetaProp)	# Calculating densities for current and proposed thetas, in case 
 		self.thetaPost = posterior(self.theta)
 		self.samples.append(self.theta)
 
+# ----> DEFINE CHAIN CONDITIONS AND RUN <----
+
 # Set chain length and run it
-ngens = 100000				# Total length of chain
+ngens = 200000				# Total length of chain
 sampleFreq = 100			# Change this to something >1 if you want to space out samples.
 updateFreq = ngens*0.1		# Frequency of screen updates to make sure chain is running.
 samples = []				# Vector to hold sampled values from cold chain
@@ -129,33 +149,69 @@ samples = []				# Vector to hold sampled values from cold chain
 # Initiate chains
 print ""
 print "Starting chain information: "
-chainOne = chain(lam=0.3,num=1,name="One",theta=uniform.rvs(loc=0,scale=1))	# Cold chain
-chainTwo = chain(lam=0.3,num=2,name="Two",theta=uniform.rvs(loc=0,scale=1))	# First "heated" chain 
-chainThree = chain(lam=0.3,num=3,name="Three",theta=uniform.rvs(loc=0,scale=1))
-chainFour = chain(lam=0.3,num=4,name="Four",theta=uniform.rvs(loc=0,scale=1))
-chainFive = chain(lam=0.3,num=5,name="Five",theta=uniform.rvs(loc=0,scale=1))
-chainSix = chain(lam=0.3,num=6,name="Six",theta=uniform.rvs(loc=0,scale=1))
-chains = [chainOne,chainTwo,chainThree,chainFour,chainFive,chainSix]	# Create list holding all chains
+chainLambda = 0
+chainOne 		= chain(lam=chainLambda,num=1,name="One",theta=uniform.rvs(loc=0,scale=1))	# Cold chain
+chainTwo 		= chain(lam=chainLambda,num=2,name="Two",theta=uniform.rvs(loc=0,scale=1))	# First "heated" chain 
+chainThree 		= chain(lam=chainLambda,num=3,name="Three",theta=uniform.rvs(loc=0,scale=1))
+chainFour 		= chain(lam=chainLambda,num=4,name="Four",theta=uniform.rvs(loc=0,scale=1))
+chainFive 		= chain(lam=chainLambda,num=5,name="Five",theta=uniform.rvs(loc=0,scale=1))
+chainSix 		= chain(lam=chainLambda,num=6,name="Six",theta=uniform.rvs(loc=0,scale=1))
+chainSeven		= chain(lam=chainLambda,num=7,name="Seven",theta=uniform.rvs(loc=0,scale=1))
+chainEight		= chain(lam=chainLambda,num=8,name="Eight",theta=uniform.rvs(loc=0,scale=1))
+chainNine		= chain(lam=chainLambda,num=9,name="Nine",theta=uniform.rvs(loc=0,scale=1))
+chainTen		= chain(lam=chainLambda,num=10,name="Ten",theta=uniform.rvs(loc=0,scale=1))
+chainEleven		= chain(lam=chainLambda,num=11,name="Eleven",theta=uniform.rvs(loc=0,scale=1))
+chainTwelve		= chain(lam=chainLambda,num=12,name="Twelve",theta=uniform.rvs(loc=0,scale=1))
+chainThirteen 	= chain(lam=chainLambda,num=13,name="Thirteen",theta=uniform.rvs(loc=0,scale=1))
+chainFourteen 	= chain(lam=chainLambda,num=14,name="Fourteen",theta=uniform.rvs(loc=0,scale=1))
+chainFifteen 	= chain(lam=chainLambda,num=15,name="Fifteen",theta=uniform.rvs(loc=0,scale=1))
+chainSixteen	= chain(lam=chainLambda,num=16,name="Sixteen",theta=uniform.rvs(loc=0,scale=1))
+chainSeventeen 	= chain(lam=chainLambda,num=17,name="Seventeen",theta=uniform.rvs(loc=0,scale=1))
+chainEighteen	= chain(lam=chainLambda,num=18,name="Eighteen",theta=uniform.rvs(loc=0,scale=1))
+chainNineteen	= chain(lam=chainLambda,num=19,name="Nineteen",theta=uniform.rvs(loc=0,scale=1))
+chainTwenty		= chain(lam=chainLambda,num=20,name="Twenty",theta=uniform.rvs(loc=0,scale=1))
+
+chains = [chainOne,		# Create list holding all chains
+		  chainTwo,
+		  chainThree,
+		  chainFour,
+		  chainFive,
+		  chainSix,
+		  chainSeven,
+		  chainEight,
+		  chainNine,
+		  chainTen,
+		  chainEleven,
+		  chainTwelve,
+		  chainThirteen,
+		  chainFourteen,
+		  chainFifteen,
+		  chainSixteen,
+		  chainSeventeen,
+		  chainEighteen,
+		  chainNineteen,
+		  chainTwenty]
 
 # Run chains
 for gen in range(ngens):
-	if (uniform.rvs() <= 0.5):
-		for chain in chains:
-			chain.update()					# Running Metropolis-Hastings sampling within each chain
-	else:
+	if (uniform.rvs() <= 0.5):		# Performs typical within-chain M-H update with 50% probability
+		for chain in chains:		# Running Metropolis-Hastings sampling within each chain
+			chain.update()			
+	else:							# Attempts a chain swap with 50% probability
 		chainSwap(chains)
 	if (gen % sampleFreq == 0):				# Appending latest sample from cold chain
 		samples.append(chainOne.theta)
 	if (gen % updateFreq == 0):				# Reporting update to screen
 		print "Generation %s" % gen
 		
+# Report chain states at end of run
 for chain in chains:
 	chain.reportState()
 
 # Summarizing MCMC samples
 
 # Numerical summaries
-burnin = int((ngens/sampleFreq)*0.1)
+burnin = int((ngens/sampleFreq)*0.1)	# Using a 10% burn-in
 postBurnSamples = samples[burnin+1:]
 print("Posterior Mean: %f" % np.mean(postBurnSamples))
 postBurnSamples.sort()  # post-burnin samples will be sorted after this is called
